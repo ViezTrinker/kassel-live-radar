@@ -1,15 +1,17 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 import pandas as pd
 from datetime import datetime
 import os
 
-app = Flask(__name__)
+# Konfiguration für statische Dateien (index.html im Unterordner /static)
+app = Flask(__name__, static_url_path='', static_folder='static')
 CORS(app)
 
 def load_gtfs():
     try:
         print("Lade GTFS-Daten für Kassel Live Radar...")
+        # Grunddaten laden
         stops = pd.read_csv('stops.txt', dtype=str)[['stop_id', 'stop_name', 'stop_lat', 'stop_lon']]
         stops['stop_lat'] = pd.to_numeric(stops['stop_lat'])
         stops['stop_lon'] = pd.to_numeric(stops['stop_lon'])
@@ -25,14 +27,16 @@ def load_gtfs():
         calendar = pd.read_csv('calendar.txt', dtype=str)
         cal_dates = pd.read_csv('calendar_dates.txt', dtype=str) if os.path.exists('calendar_dates.txt') else pd.DataFrame()
 
+        # Haupt-DataFrame für die Live-Berechnung
         df_live = stimes.merge(stops, on='stop_id').merge(trips, on='trip_id').merge(routes, on='route_id')
         df_live['seconds'] = df_live['departure_time'].apply(lambda x: int(x.split(':')[0])*3600 + int(x.split(':')[1])*60 + int(x.split(':')[2]))
         
         return df_live, stops_display, calendar, cal_dates, stimes, trips, routes, stops
     except Exception as e:
-        print(f"Fehler: {e}")
+        print(f"Fehler beim Laden der GTFS-Daten: {e}")
         return None
 
+# Daten beim Start laden
 data_bundle = load_gtfs()
 df_main, df_stops_display, calendar, cal_dates, df_stimes, df_trips, df_routes, df_all_stops = data_bundle
 
@@ -48,13 +52,20 @@ def get_active_services():
         active.extend(added)
     return active
 
+# --- ROUTES ---
+
+@app.route('/')
+def index():
+    return app.send_static_file('index.html')
+
 @app.route('/stops')
 def get_stops():
     return jsonify(df_stops_display.to_dict(orient='records'))
 
 @app.route('/stop_schedule/<stop_name>')
 def get_stop_schedule(stop_name):
-    now = datetime.now(); sec = now.hour * 3600 + now.minute * 60 + now.second
+    now = datetime.now()
+    sec = now.hour * 3600 + now.minute * 60 + now.second
     active_services = get_active_services()
     relevant_ids = df_all_stops[df_all_stops['stop_name'] == stop_name]['stop_id'].tolist()
     schedule = df_stimes[df_stimes['stop_id'].isin(relevant_ids)].copy()
@@ -99,4 +110,5 @@ def get_vehicle_details(trip_id):
     })
 
 if __name__ == '__main__':
-    app.run(port=5000, threaded=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)

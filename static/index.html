@@ -7,30 +7,21 @@
     <style>
         body { margin: 0; padding: 0; background: #f0f2f5; font-family: 'Segoe UI', Arial, sans-serif; overflow: hidden; }
         #map { height: 100vh; width: 100%; background: #e5e3df; }
-
-        /* HUD Elemente */
-        #clock-container { position: absolute; bottom: 10px; right: 10px; z-index: 1000; background: rgba(255,255,255,0.8); padding: 5px 12px; border-radius: 4px; color: #444; font-family: monospace; font-size: 14px; border: 1px solid #ccc; }
+        #clock-container { position: absolute; bottom: 10px; right: 10px; z-index: 1000; background: rgba(255,255,255,0.8); padding: 5px 12px; border-radius: 4px; color: #444; font-family: monospace; font-size: 14px; border: 1px solid #ccc; pointer-events: none; }
         #search-container { position: absolute; top: 15px; left: 50px; z-index: 1000; width: 250px; }
         #stop-search { width: 100%; background: #fff; border: none; color: #333; padding: 12px 15px; border-radius: 8px; outline: none; font-size: 14px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
-        
         #search-results { list-style: none; margin: 5px 0 0 0; padding: 0; max-height: 250px; overflow-y: auto; background: #fff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
         #search-results li { padding: 10px 15px; cursor: pointer; color: #444; border-bottom: 1px solid #eee; font-size: 13px; }
         #search-results li:hover { background: #f0f0f0; color: #007bff; }
-
-        /* Popups & Tooltips */
         .leaflet-tooltip { background: #fff; color: #333; border: 1px solid #ccc; font-weight: bold; font-size: 11px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
         .leaflet-popup-content-wrapper { background: #fff; color: #333; border-radius: 8px; font-size: 13px; padding: 0; }
-        .leaflet-popup-content { margin: 12px; }
-        
         .line-badge { padding: 2px 6px; border-radius: 4px; font-weight: bold; color: white; min-width: 28px; text-align: center; display: inline-block; }
         .schedule-table { width: 100%; border-collapse: collapse; margin-top: 8px; color: #333; }
         .schedule-table td { padding: 6px 4px; border-bottom: 1px solid #eee; }
-        
         .leaflet-interactive { transition: all 1s linear; }
     </style>
 </head>
 <body>
-
     <div id="search-container">
         <input type="text" id="stop-search" placeholder="Haltestelle suchen...">
         <ul id="search-results"></ul>
@@ -40,7 +31,6 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // Nutzt CartoDB Voyager (Hell, Google Maps Style)
         const map = L.map('map', { zoomControl: true, attributionControl: false }).setView([51.315, 9.496], 14);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
 
@@ -52,12 +42,11 @@
 
         function updateClock() { document.getElementById('clock-time').textContent = new Date().toLocaleTimeString('de-DE'); }
         setInterval(updateClock, 1000); updateClock();
-
         map.on('click', () => routeLayer.clearLayers());
 
         async function loadStops() {
-            const response = await fetch('http://localhost:5000/stops');
-            allStops = await response.json();
+            const res = await fetch('/stops');
+            allStops = await res.json();
             allStops.forEach(s => {
                 const marker = L.circleMarker([s.stop_lat, s.stop_lon], { radius: 4, color: '#555', weight: 1, fillColor: '#fff', fillOpacity: 0.9 });
                 marker.bindTooltip(s.stop_name);
@@ -70,7 +59,7 @@
 
         async function openStopSchedule(stop, marker) {
             marker.bindPopup("Lade...").openPopup();
-            const res = await fetch(`http://localhost:5000/stop_schedule/${encodeURIComponent(stop.stop_name)}`);
+            const res = await fetch(`/stop_schedule/${encodeURIComponent(stop.stop_name)}`);
             const data = await res.json();
             let html = `<div style="min-width:240px;"><b style="color:#333; font-size:15px; border-bottom:2px solid #007bff; display:block; padding-bottom:4px;">${stop.stop_name}</b><table class="schedule-table">`;
             data.forEach(row => {
@@ -82,30 +71,25 @@
 
         async function updateVehicles() {
             try {
-                const response = await fetch('http://localhost:5000/vehicles');
+                const response = await fetch('/vehicles');
                 const data = await response.json();
                 const activeIds = data.map(v => v.id);
 
                 data.forEach(v => {
-                    // Farben etwas kräftiger für hellen Hintergrund
                     const color = v.type === 0 ? '#d63384' : '#00a8ff';
                     if (vehicleMarkers[v.id]) {
                         vehicleMarkers[v.id].setLatLng([v.lat, v.lon]);
                     } else {
                         vehicleMarkers[v.id] = L.circleMarker([v.lat, v.lon], { radius: 8, color: '#fff', fillColor: color, fillOpacity: 0.9, weight: 2 }).addTo(map);
                         vehicleMarkers[v.id].bindTooltip(v.line, { permanent: true, direction: 'top', offset: [0, -5] });
-                        
                         vehicleMarkers[v.id].on('click', async (e) => {
                             L.DomEvent.stopPropagation(e);
                             routeLayer.clearLayers();
                             const marker = vehicleMarkers[v.id];
                             marker.bindPopup("Trip laden...").openPopup();
-                            
-                            const res = await fetch(`http://localhost:5000/vehicle_details/${v.id}`);
+                            const res = await fetch(`/vehicle_details/${v.id}`);
                             const d = await res.json();
-                            
                             L.polyline(d.full_route, { color: color, weight: 5, opacity: 0.4, dashArray: '5, 10' }).addTo(routeLayer);
-
                             let h = `<div style="min-width:220px;"><b style="color:${color}; font-size:14px;">Linie ${v.line} ➔ ${d.destination}</b><br><br>`;
                             if(d.previous.length > 0) {
                                 h += `<div style="color:#888; font-size:11px;">PASSAGE:</div>`;
