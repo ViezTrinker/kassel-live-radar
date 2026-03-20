@@ -2,7 +2,7 @@
 
 ![Project Preview](kassel_live_radar.png)
 
-A real-time transit visualization dashboard...
+A real-time transit visualization dashboard for Kassel, Germany. This application interpolates GTFS schedule data to simulate live vehicle positions on a high-performance interactive map.
 
 ## 🌟 Features
 
