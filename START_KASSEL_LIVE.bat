@@ -1,20 +1,19 @@
 @echo off
-echo [1/2] Installiere Pakete...
-python -m pip install flask flask-cors pandas -q
+title Kassel Radar Local Server
+echo [1/3] Bereinige alte Verbindungen...
+taskkill /f /im python.exe /t >nul 2>&1
 
-echo [2/2] Starte Server und Karte...
-:: Startet den Server minimiert in einem neuen Fenster
-start /min "KasselServer" python server.py
+echo [2/3] Starte Python Server im Hintergrund...
+cd /d "%~dp0"
+:: Startet Python in einem eigenen Prozess, damit die Batch weiterläuft
+start /b python server.py
 
-:: Wartet 3 Sekunden, damit der Server bereit ist
+echo [3/3] Warte kurz auf Daten-Initialisierung...
 timeout /t 3 /nobreak >nul
 
-:: Öffnet die Karte
-start index.html
+echo [FERTIG] Oeffne Radar im Browser...
+start http://localhost:5000
 
-echo.
-echo ============================================
-echo   DER RADAR LAEUFT JETZT!
-echo   Dieses Fenster offen lassen.
-echo ============================================
+:: Hält das Fenster offen, falls Python Fehlermeldungen ausgibt
+echo Server läuft. Fenster nicht schliessen!
 pause
