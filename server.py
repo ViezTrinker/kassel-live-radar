@@ -1,0 +1,102 @@
+from flask import Flask, jsonify
+from flask_cors import CORS
+import pandas as pd
+from datetime import datetime
+import os
+
+app = Flask(__name__)
+CORS(app)
+
+def load_gtfs():
+    try:
+        print("Lade GTFS-Daten für Kassel Live Radar...")
+        stops = pd.read_csv('stops.txt', dtype=str)[['stop_id', 'stop_name', 'stop_lat', 'stop_lon']]
+        stops['stop_lat'] = pd.to_numeric(stops['stop_lat'])
+        stops['stop_lon'] = pd.to_numeric(stops['stop_lon'])
+        
+        stops_display = stops.groupby('stop_name').agg({
+            'stop_lat': 'mean', 'stop_lon': 'mean', 'stop_id': 'first'
+        }).reset_index()
+
+        routes = pd.read_csv('routes.txt', dtype=str)[['route_id', 'route_short_name', 'route_type']]
+        trips = pd.read_csv('trips.txt', dtype=str)[['trip_id', 'route_id', 'service_id', 'trip_headsign']]
+        stimes = pd.read_csv('stop_times.txt', dtype=str)[['trip_id', 'departure_time', 'stop_id']]
+
+        calendar = pd.read_csv('calendar.txt', dtype=str)
+        cal_dates = pd.read_csv('calendar_dates.txt', dtype=str) if os.path.exists('calendar_dates.txt') else pd.DataFrame()
+
+        df_live = stimes.merge(stops, on='stop_id').merge(trips, on='trip_id').merge(routes, on='route_id')
+        df_live['seconds'] = df_live['departure_time'].apply(lambda x: int(x.split(':')[0])*3600 + int(x.split(':')[1])*60 + int(x.split(':')[2]))
+        
+        return df_live, stops_display, calendar, cal_dates, stimes, trips, routes, stops
+    except Exception as e:
+        print(f"Fehler: {e}")
+        return None
+
+data_bundle = load_gtfs()
+df_main, df_stops_display, calendar, cal_dates, df_stimes, df_trips, df_routes, df_all_stops = data_bundle
+
+def get_active_services():
+    now = datetime.now()
+    day_name = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"][now.weekday()]
+    today = now.strftime("%Y%m%d")
+    active = calendar[calendar[day_name] == '1']['service_id'].tolist()
+    if not cal_dates.empty:
+        removed = cal_dates[(cal_dates['date'] == today) & (cal_dates['exception_type'] == '2')]['service_id'].tolist()
+        added = cal_dates[(cal_dates['date'] == today) & (cal_dates['exception_type'] == '1')]['service_id'].tolist()
+        active = [s for s in active if s not in removed]
+        active.extend(added)
+    return active
+
+@app.route('/stops')
+def get_stops():
+    return jsonify(df_stops_display.to_dict(orient='records'))
+
+@app.route('/stop_schedule/<stop_name>')
+def get_stop_schedule(stop_name):
+    now = datetime.now(); sec = now.hour * 3600 + now.minute * 60 + now.second
+    active_services = get_active_services()
+    relevant_ids = df_all_stops[df_all_stops['stop_name'] == stop_name]['stop_id'].tolist()
+    schedule = df_stimes[df_stimes['stop_id'].isin(relevant_ids)].copy()
+    schedule['sec'] = schedule['departure_time'].apply(lambda x: int(x.split(':')[0])*3600 + int(x.split(':')[1])*60 + int(x.split(':')[2]))
+    upcoming = schedule[(schedule['sec'] >= sec) & (schedule['sec'] <= sec + 3600)]
+    upcoming = upcoming.merge(df_trips, on='trip_id').merge(df_routes, on='route_id')
+    upcoming = upcoming[upcoming['service_id'].isin(active_services)]
+    results = upcoming.sort_values('sec').drop_duplicates(subset=['departure_time', 'route_short_name', 'trip_headsign']).head(15)
+    return jsonify(results[['departure_time', 'route_short_name', 'trip_headsign']].to_dict(orient='records'))
+
+@app.route('/vehicles')
+def get_vehicles():
+    sec = datetime.now().hour * 3600 + datetime.now().minute * 60 + datetime.now().second
+    active_services = get_active_services()
+    active_now = df_main[(df_main['seconds'] >= sec - 600) & (df_main['seconds'] <= sec + 600) & (df_main['service_id'].isin(active_services))]
+    vehicles = []
+    for tid, group in active_now.groupby('trip_id'):
+        group = group.sort_values('seconds')
+        before, after = group[group['seconds'] <= sec].tail(1), group[group['seconds'] >= sec].head(1)
+        if not before.empty and not after.empty and before.index[0] != after.index[0]:
+            r_a, r_b = before.iloc[0], after.iloc[0]
+            frac = (sec - r_a['seconds']) / (r_b['seconds'] - r_a['seconds'])
+            vehicles.append({
+                'id': str(tid), 'lat': r_a['stop_lat'] + (r_b['stop_lat'] - r_a['stop_lat']) * frac,
+                'lon': r_a['stop_lon'] + (r_b['stop_lon'] - r_a['stop_lon']) * frac,
+                'line': str(r_a['route_short_name']), 'type': int(r_a['route_type'])
+            })
+    return jsonify(vehicles)
+
+@app.route('/vehicle_details/<trip_id>')
+def get_vehicle_details(trip_id):
+    sec = datetime.now().hour * 3600 + datetime.now().minute * 60 + datetime.now().second
+    trip_stops = df_stimes[df_stimes['trip_id'] == trip_id].copy()
+    trip_stops = trip_stops.merge(df_all_stops[['stop_id', 'stop_name', 'stop_lat', 'stop_lon']], on='stop_id')
+    trip_stops['sec'] = trip_stops['departure_time'].apply(lambda x: int(x.split(':')[0])*3600 + int(x.split(':')[1])*60 + int(x.split(':')[2]))
+    trip_stops = trip_stops.sort_values('sec')
+    return jsonify({
+        'previous': trip_stops[trip_stops['sec'] < sec].tail(5)[['departure_time', 'stop_name']].to_dict(orient='records'),
+        'next': trip_stops[trip_stops['sec'] >= sec].head(5)[['departure_time', 'stop_name']].to_dict(orient='records'),
+        'destination': trip_stops.iloc[-1]['stop_name'],
+        'full_route': trip_stops[['stop_lat', 'stop_lon']].values.tolist()
+    })
+
+if __name__ == '__main__':
+    app.run(port=5000, threaded=True)

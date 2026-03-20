@@ -1,0 +1,4 @@
+"agency_id","agency_name","agency_url","agency_timezone","agency_lang","agency_phone"
+"2","NVV","https://www.nvv.de/","Europe/Berlin","de","+498009390800"
+"179","NVV","https://www.nvv.de/","Europe/Berlin","de","+498009390800"
+"264","NVV","https://www.nvv.de/","Europe/Berlin","de","+498009390800"
