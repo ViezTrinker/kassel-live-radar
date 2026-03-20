@@ -2,57 +2,46 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>Kassel Radar - Complete</title>
+    <title>Kassel Radar</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
-        #map { height: 100vh; width: 100%; background: #eee; }
-        .leaflet-marker-icon { transition: transform 1.1s linear !important; }
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; overflow: hidden; background: #f0f2f5; }
+        #map { height: 100vh; width: 100%; }
+        
+        /* MINIMAL INVASIV: Smooth Transition für flüssige Bewegung */
+        .leaflet-marker-icon { transition: transform 1.5s linear !important; }
 
-        /* Suche oben links */
-        #search-box { position: absolute; top: 15px; left: 15px; z-index: 1000; width: 250px; }
-        #stop-input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; box-shadow: 0 2px 6px rgba(0,0,0,0.2); outline: none; }
-        #results { list-style: none; margin: 5px 0; padding: 0; background: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-height: 200px; overflow-y: auto; }
-        #results li { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 13px; }
-        #results li:hover { background: #f0f0f0; }
-
-        /* Zeitreise unten links */
-        #control-panel {
-            position: absolute; bottom: 70px; left: 15px; z-index: 1000;
-            background: white; padding: 15px; border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 230px;
-            transition: 0.3s ease; opacity: 0; transform: translateY(20px); pointer-events: none;
-        }
-        #control-panel.active { opacity: 1; transform: translateY(0); pointer-events: all; }
-        #toggle-panel { position: absolute; bottom: 15px; left: 15px; z-index: 1001; background: #333; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: bold; }
-
-        /* Uhr unten rechts */
-        #clock-container { position: absolute; bottom: 15px; right: 15px; z-index: 1000; background: rgba(255,255,255,0.9); padding: 8px 15px; border-radius: 6px; border: 1px solid #ccc; font-family: monospace; font-size: 15px; font-weight: bold; }
-
-        .vehicle-dot { width: 22px; height: 22px; border-radius: 50%; border: 2px solid white; display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-        .section-title { font-size: 10px; color: #999; text-transform: uppercase; margin-top: 10px; font-weight: bold; }
-        input[type="date"], input[type="time"] { width: 100%; border: 1px solid #ddd; padding: 5px; margin-top: 5px; border-radius: 4px; }
-        .line-badge { padding: 2px 5px; border-radius: 3px; color: white; font-weight: bold; font-size: 10px; margin-right: 5px; }
+        #clock-container { position: absolute; bottom: 20px; right: 20px; z-index: 1000; background: rgba(33, 37, 41, 0.95); color: #fff; padding: 8px 16px; border-radius: 8px; font-family: monospace; font-size: 16px; border: 1px solid #444; }
+        #stats-panel { position: absolute; top: 15px; right: 15px; z-index: 1000; background: white; padding: 15px; border-radius: 12px; width: 230px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); border: 1px solid #e0e0e0; }
+        .stat-line-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; font-size: 13px; }
+        .bar-container { height: 6px; background: #eee; border-radius: 3px; margin-bottom: 10px; overflow: hidden; }
+        .bar-fill { height: 100%; background: #007bff; transition: width 0.8s ease; }
+        #toggle-panel { position: absolute; bottom: 20px; left: 20px; z-index: 1001; background: #212529; color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+        #control-panel { position: absolute; bottom: 85px; left: 20px; z-index: 1000; background: white; padding: 20px; border-radius: 12px; width: 240px; display: none; box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+        #control-panel.active { display: block; }
+        .vehicle-dot { width: 24px; height: 24px; border-radius: 50%; border: 2px solid white; display: flex; align-items: center; justify-content: center; color: white; font-size: 11px; font-weight: bold; cursor: pointer; }
+        .popup-title { font-weight: 800; font-size: 15px; margin-bottom: 10px; border-bottom: 2px solid #f0f0f0; padding-bottom: 5px; }
+        .sched-table { width: 100%; border-collapse: collapse; }
+        .line-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; color: white; font-weight: bold; font-size: 10px; margin-right: 8px; min-width: 20px; text-align: center; }
+        .line-tram { background: #d63384; } .line-bus { background: #007bff; }
+        .prev-stop-item { color: #adb5bd; text-decoration: line-through; font-size: 11px; }
+        .next-stop-item { color: #198754; font-weight: 600; font-size: 11px; }
     </style>
 </head>
 <body>
-
-    <div id="search-box">
-        <input type="text" id="stop-input" placeholder="Haltestelle suchen...">
-        <ul id="results"></ul>
+    <div id="stats-panel">
+        <div style="font-size: 11px; color: #6c757d; font-weight: bold; text-transform: uppercase;">Aktiv im Netz</div>
+        <div style="font-size: 24px; font-weight: 800; margin: 5px 0 15px 0;" id="stat-total">0</div>
+        <div id="top-lines-list"></div>
     </div>
-
     <button id="toggle-panel" onclick="toggleMenu()">🕒 ZEITREISE</button>
-
     <div id="control-panel">
-        <div class="section-title">Zeitpunkt</div>
-        <input type="date" id="tt-date">
-        <input type="time" id="tt-time" step="1">
-        <div class="section-title">Vorspulen: <span id="warp-val">1</span>x</div>
+        <input type="date" id="tt-date" style="width:100%; margin-bottom:10px; padding:5px;">
+        <input type="time" id="tt-time" step="1" style="width:100%; margin-bottom:10px; padding:5px;">
         <input type="range" id="warp-slider" min="1" max="60" value="1" style="width:100%">
-        <button onclick="resetTime()" style="width:100%; margin-top:10px; padding:8px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">ECHTZEIT</button>
+        <div style="font-size:11px;">Tempo: <span id="warp-val">1</span>x</div>
+        <button onclick="resetTime()" style="width:100%; margin-top:10px; padding:8px; background:#007bff; color:white; border:none; border-radius:6px; cursor:pointer;">ECHTZEIT</button>
     </div>
-
     <div id="clock-container"><span id="clock-time">00:00:00</span></div>
     <div id="map"></div>
 
@@ -60,110 +49,87 @@
     <script>
         const map = L.map('map', { zoomControl: false }).setView([51.315, 9.496], 14);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
-
-        let vehicleMarkers = {}, stopMarkers = {}, allStops = [];
-        let stopLayer = L.layerGroup(), routeLayer = L.layerGroup().addTo(map);
+        let vehicleMarkers = {}, stopLayer = L.layerGroup(), routeLayer = L.layerGroup().addTo(map);
         let simTime = new Date(), warpFactor = 1;
 
-        const dateIn = document.getElementById('tt-date'), timeIn = document.getElementById('tt-time');
-        const warpSlider = document.getElementById('warp-slider'), clockDisplay = document.getElementById('clock-time');
-
         function toggleMenu() { document.getElementById('control-panel').classList.toggle('active'); }
-        function resetTime() { simTime = new Date(); warpFactor = 1; warpSlider.value = 1; document.getElementById('warp-val').textContent = "1"; updateInputs(); }
-        function updateInputs() { dateIn.value = simTime.toISOString().split('T')[0]; timeIn.value = simTime.toLocaleTimeString('de-DE', {hour12: false}); }
+        function resetTime() { simTime = new Date(); warpFactor = 1; updateInputs(); }
+        function updateInputs() { 
+            document.getElementById('tt-date').value = simTime.toISOString().split('T')[0];
+            document.getElementById('tt-time').value = simTime.toLocaleTimeString('de-DE', {hour12: false});
+        }
+        document.getElementById('warp-slider').oninput = (e) => { warpFactor = parseInt(e.target.value); document.getElementById('warp-val').textContent = warpFactor; };
 
-        warpSlider.oninput = (e) => { warpFactor = parseInt(e.target.value); document.getElementById('warp-val').textContent = warpFactor; };
-        [dateIn, timeIn].forEach(el => el.onchange = () => {
-            const d = dateIn.value.split('-'), t = timeIn.value.split(':');
-            simTime = new Date(d[0], d[1]-1, d[2], t[0], t[1], t[2] || 0);
-        });
+        setInterval(() => {
+            simTime.setSeconds(simTime.getSeconds() + 1 * warpFactor);
+            document.getElementById('clock-time').textContent = simTime.toLocaleTimeString('de-DE');
+        }, 1000);
 
-        // Haltestellen laden
         async function loadStops() {
-            const res = await fetch('/stops');
-            allStops = await res.json();
-            allStops.forEach(s => {
-                const m = L.circleMarker([s.stop_lat, s.stop_lon], { radius: 4, color: '#666', fillColor: '#fff', fillOpacity: 1, weight: 1 });
-                m.bindTooltip(s.stop_name);
-                m.on('click', () => showStopSchedule(s, m));
-                stopMarkers[s.stop_name] = m;
+            const res = await fetch('/stops'); const stops = await res.json();
+            stops.forEach(s => {
+                const m = L.circleMarker([s.stop_lat, s.stop_lon], { radius: 5, color: '#6c757d', fillColor: '#fff', fillOpacity: 1, weight: 2 });
+                m.on('click', async function() {
+                    const v_t = simTime.toLocaleTimeString('de-DE', {hour12: false});
+                    const v_d = simTime.toISOString().split('T')[0].replace(/-/g, '');
+                    const r = await fetch(`/stop_schedule/${encodeURIComponent(s.stop_name)}?time=${v_t}&date=${v_d}`);
+                    const data = await r.json();
+                    let h = `<div class="popup-title">${s.stop_name}</div><table class="sched-table">`;
+                    data.forEach(d => {
+                        const bc = parseInt(d.route_short_name) < 10 ? 'line-tram' : 'line-bus';
+                        h += `<tr><td><b>${d.departure_time.substring(0,5)}</b></td><td><span class="line-badge ${bc}">${d.route_short_name}</span></td><td style="font-size:12px;">${d.trip_headsign}</td></tr>`;
+                    });
+                    this.bindPopup(h + "</table>").openPopup();
+                });
                 m.addTo(stopLayer);
             });
         }
 
-        async function showStopSchedule(stop, marker) {
-            const v_time = simTime.toLocaleTimeString('de-DE', {hour12: false});
-            const res = await fetch(`/stop_schedule/${encodeURIComponent(stop.stop_name)}?time=${v_time}`);
-            const data = await res.json();
-            let h = `<div style="min-width:180px"><b>${stop.stop_name}</b><br><small>Nächste Abfahrten:</small><hr>`;
-            data.forEach(r => {
-                h += `<div style="font-size:11px; margin-bottom:4px;"><b>${r.departure_time.substring(0,5)}</b> <span class="line-badge" style="background:#444">${r.route_short_name}</span> ${r.trip_headsign}</div>`;
+        function updateStats(data) {
+            document.getElementById('stat-total').textContent = data.length;
+            const counts = {}; data.forEach(v => counts[v.line] = (counts[v.line] || 0) + 1);
+            // MINIMAL INVASIV: Top 6 statt Top 3
+            const top = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0, 6);
+            let html = '';
+            top.forEach(([l, c]) => {
+                html += `<div class="stat-line-row"><span>Linie ${l}</span><b>${c}</b></div><div class="bar-container"><div class="bar-fill" style="width:${Math.min(c*10, 100)}%"></div></div>`;
             });
-            marker.bindPopup(h + `</div>`).openPopup();
+            document.getElementById('top-lines-list').innerHTML = html;
         }
-
-        // Suche
-        document.getElementById('stop-input').oninput = (e) => {
-            const val = e.target.value.toLowerCase();
-            const resUl = document.getElementById('results');
-            resUl.innerHTML = '';
-            if (val.length < 2) return;
-            allStops.filter(s => s.stop_name.toLowerCase().includes(val)).slice(0, 6).forEach(s => {
-                const li = document.createElement('li');
-                li.textContent = s.stop_name;
-                li.onclick = () => { map.setView([s.stop_lat, s.stop_lon], 16); showStopSchedule(s, stopMarkers[s.stop_name]); resUl.innerHTML = ''; };
-                resUl.appendChild(li);
-            });
-        };
-
-        // Zoom-Check für Haltestellen
-        map.on('zoomend', () => {
-            if (map.getZoom() >= 15) { if (!map.hasLayer(stopLayer)) map.addLayer(stopLayer); }
-            else { if (map.hasLayer(stopLayer)) map.removeLayer(stopLayer); }
-        });
-
-        setInterval(() => {
-            simTime.setSeconds(simTime.getSeconds() + 1 * warpFactor);
-            clockDisplay.textContent = simTime.toLocaleTimeString('de-DE');
-        }, 1000);
 
         async function updateVehicles() {
-            try {
-                const v_time = simTime.toLocaleTimeString('de-DE', {hour12: false});
-                const v_date = simTime.toISOString().split('T')[0].replace(/-/g, '');
-                const res = await fetch(`/vehicles?time=${v_time}&date=${v_date}`);
-                const data = await res.json();
-                const activeIds = data.map(v => v.id);
-                data.forEach(v => {
-                    const color = v.type === 0 ? '#d63384' : '#00a8ff';
-                    if (vehicleMarkers[v.id]) { vehicleMarkers[v.id].setLatLng([v.lat, v.lon]); }
-                    else {
-                        const icon = L.divIcon({ className: 'v-icon', html: `<div class="vehicle-dot" style="background-color:${color}">${v.line}</div>`, iconSize: [22, 22], iconAnchor: [11, 11] });
-                        const m = L.marker([v.lat, v.lon], { icon: icon }).addTo(map);
-                        m.on('click', () => showVehicleDetails(v, m));
-                        vehicleMarkers[v.id] = m;
-                    }
-                });
-                Object.keys(vehicleMarkers).forEach(id => { if (!activeIds.includes(id)) { map.removeLayer(vehicleMarkers[id]); delete vehicleMarkers[id]; } });
-            } catch (e) {}
+            const v_t = simTime.toLocaleTimeString('de-DE', {hour12: false});
+            const v_d = simTime.toISOString().split('T')[0].replace(/-/g, '');
+            const res = await fetch(`/vehicles?time=${v_t}&date=${v_d}`);
+            const data = await res.json();
+            updateStats(data);
+            const activeIds = data.map(v => v.id);
+            data.forEach(v => {
+                const color = v.type === 0 ? '#d63384' : '#007bff';
+                if (vehicleMarkers[v.id]) { vehicleMarkers[v.id].setLatLng([v.lat, v.lon]); }
+                else {
+                    const icon = L.divIcon({ className: 'v-icon', html: `<div class="vehicle-dot" style="background-color:${color}">${v.line}</div>`, iconSize:[24,24], iconAnchor:[12,12] });
+                    const m = L.marker([v.lat, v.lon], { icon: icon }).addTo(map);
+                    m.on('click', async function() {
+                        routeLayer.clearLayers();
+                        const rD = await fetch(`/vehicle_details/${v.id}?time=${v_t}`); const d = await rD.json();
+                        L.polyline(d.full_route, {color: color, weight: 3, opacity: 0.6}).addTo(routeLayer);
+                        let h = `<div class="popup-title">Linie ${v.line} ➔ ${d.destination}</div><div style="font-size:10px; color:#adb5bd;">VERGANGEN</div>`;
+                        d.previous.forEach(p => h += `<div class="prev-stop-item">● ${p.departure_time.substring(0,5)} - ${p.stop_name}</div>`);
+                        h += `<div style="font-size:10px; color:#198754; margin-top:5px;">NÄCHSTE</div>`;
+                        d.next.forEach(n => h += `<div class="next-stop-item">● ${n.departure_time.substring(0,5)} - ${n.stop_name}</div>`);
+                        this.bindPopup(h).openPopup();
+                    });
+                    vehicleMarkers[v.id] = m;
+                }
+            });
+            Object.keys(vehicleMarkers).forEach(id => { if(!activeIds.includes(id)) { map.removeLayer(vehicleMarkers[id]); delete vehicleMarkers[id]; } });
         }
 
-        async function showVehicleDetails(v, marker) {
-            routeLayer.clearLayers();
-            const v_time = simTime.toLocaleTimeString('de-DE', {hour12: false});
-            const res = await fetch(`/vehicle_details/${v.id}?time=${v_time}`);
-            const d = await res.json();
-            L.polyline(d.full_route, { color: '#333', weight: 2, opacity: 0.3, dashArray: '5,5' }).addTo(routeLayer);
-            let h = `<div style="min-width:180px"><b>Linie ${v.line} ➔ ${d.destination}</b><hr>`;
-            h += `<small style="color:gray">ZULETZT:</small>`;
-            d.previous.forEach(p => h += `<div style="font-size:11px; color:#999">${p.stop_name} (${p.departure_time.substring(0,5)})</div>`);
-            h += `<small style="color:green; display:block; margin-top:5px">NÄCHSTE:</small>`;
-            d.next.forEach(n => h += `<div style="font-size:11px"><b>${n.stop_name}</b> (${n.departure_time.substring(0,5)})</div>`);
-            marker.bindPopup(h + `</div>`).openPopup();
-        }
-
-        loadStops(); resetTime();
-        setInterval(updateVehicles, 1500);
+        map.on('zoomend', () => { if (map.getZoom() >= 15) map.addLayer(stopLayer); else map.removeLayer(stopLayer); });
+        loadStops(); updateInputs(); 
+        // Intervall auf 1.5s für Smooth-Animation
+        setInterval(updateVehicles, 1500); 
         updateVehicles();
     </script>
 </body>
