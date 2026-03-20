@@ -7,10 +7,7 @@
     <style>
         body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; overflow: hidden; background: #f0f2f5; }
         #map { height: 100vh; width: 100%; }
-        
-        /* MINIMAL INVASIV: Smooth Transition für flüssige Bewegung */
         .leaflet-marker-icon { transition: transform 1.5s linear !important; }
-
         #clock-container { position: absolute; bottom: 20px; right: 20px; z-index: 1000; background: rgba(33, 37, 41, 0.95); color: #fff; padding: 8px 16px; border-radius: 8px; font-family: monospace; font-size: 16px; border: 1px solid #444; }
         #stats-panel { position: absolute; top: 15px; right: 15px; z-index: 1000; background: white; padding: 15px; border-radius: 12px; width: 230px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); border: 1px solid #e0e0e0; }
         .stat-line-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; font-size: 13px; }
@@ -58,6 +55,17 @@
             document.getElementById('tt-date').value = simTime.toISOString().split('T')[0];
             document.getElementById('tt-time').value = simTime.toLocaleTimeString('de-DE', {hour12: false});
         }
+
+        // NEU & MINIMAL INVASIV: Inputs an simTime binden
+        document.getElementById('tt-date').onchange = (e) => {
+            const [y, m, d] = e.target.value.split('-');
+            simTime.setFullYear(y, m - 1, d);
+        };
+        document.getElementById('tt-time').onchange = (e) => {
+            const [h, min, s] = e.target.value.split(':');
+            simTime.setHours(h, min, s || 0);
+        };
+
         document.getElementById('warp-slider').oninput = (e) => { warpFactor = parseInt(e.target.value); document.getElementById('warp-val').textContent = warpFactor; };
 
         setInterval(() => {
@@ -88,7 +96,6 @@
         function updateStats(data) {
             document.getElementById('stat-total').textContent = data.length;
             const counts = {}; data.forEach(v => counts[v.line] = (counts[v.line] || 0) + 1);
-            // MINIMAL INVASIV: Top 6 statt Top 3
             const top = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0, 6);
             let html = '';
             top.forEach(([l, c]) => {
@@ -127,10 +134,7 @@
         }
 
         map.on('zoomend', () => { if (map.getZoom() >= 15) map.addLayer(stopLayer); else map.removeLayer(stopLayer); });
-        loadStops(); updateInputs(); 
-        // Intervall auf 1.5s für Smooth-Animation
-        setInterval(updateVehicles, 1500); 
-        updateVehicles();
+        loadStops(); updateInputs(); setInterval(updateVehicles, 1500); updateVehicles();
     </script>
 </body>
 </html>
